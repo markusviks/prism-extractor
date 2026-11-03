@@ -28,7 +28,7 @@ Works on Apple silicon and Intel Macs.
 - Each graph is listed with its slide number. Then:
   - **Open in Prism** saves the graph to your Downloads folder and opens it.
   - **Download** saves it to Downloads and shows it in Finder.
-  - **Download all** saves every graph to Downloads at once.
+  - **Download all** zips every graph into one file in Downloads, named after the deck.
 - Clicking again won't make duplicates. If you've edited a saved graph in Prism, the next save
   goes to a new name such as `… (1).pzf`, so your edits are never overwritten.
 - Your files never leave your Mac. The app runs entirely on your computer.

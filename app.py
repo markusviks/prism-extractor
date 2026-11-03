@@ -268,7 +268,8 @@ def api_extract():
 
     shutil.rmtree(job_dir / "_in", ignore_errors=True)
     files = {o["file"]: o for r in results for o in r["objects"]}
-    JOBS[job_id] = {"dir": job_dir, "files": files}
+    docs = [Path(r["name"]).stem for r in results if r["objects"]]
+    JOBS[job_id] = {"dir": job_dir, "files": files, "docs": docs}
     return jsonify(job=job_id, results=results, total=len(files))
 
 
@@ -311,10 +312,22 @@ def api_save(job_id, name):
 
 @app.post("/api/jobs/<job_id>/save-all")
 def api_save_all(job_id):
-    saved = save_to_disk(job_id, list(get_job(job_id)["files"]))
-    if sys.platform == "darwin" and saved:
-        subprocess.Popen(["open", "-R", *map(str, saved)])
-    return jsonify(folder=str(SAVE_ROOT), count=len(saved))
+    """Zip every graph into ~/Downloads/<deck> Prism graphs.zip and show it in Finder."""
+    job = get_job(job_id)
+    stem = job["docs"][0] if len(job["docs"]) == 1 else "Prism"
+    stem = re.sub(r"[^\w\- .]+", "_", stem)
+    SAVE_ROOT.mkdir(parents=True, exist_ok=True)
+    dest = SAVE_ROOT / f"{stem} graphs.zip"
+    i = 1
+    while dest.exists():
+        dest = SAVE_ROOT / f"{stem} graphs ({i}).zip"
+        i += 1
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in job["files"]:
+            zf.write(job["dir"] / name, name)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(dest)])
+    return jsonify(path=str(dest), count=len(job["files"]))
 
 
 @app.post("/api/quit")
@@ -505,7 +518,7 @@ function render({ job, results, total }) {
   resultsEl.querySelectorAll("[data-save-all]").forEach(b => b.addEventListener("click", async () => {
     const res = await fetch(`${base}/save-all`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
-    statusEl.textContent = res.ok ? `Saved ${data.count} graph${data.count > 1 ? "s" : ""} to Downloads` : "Couldn't save the files.";
+    statusEl.textContent = res.ok ? `Saved ${data.count} graphs as ${fileName(data.path)} in Downloads` : "Couldn't save the files.";
   }));
 }
 

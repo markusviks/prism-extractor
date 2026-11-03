@@ -44,7 +44,7 @@ NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
 }
-SAVE_ROOT = Path.home() / "Downloads" / "Prism Extracts"
+SAVE_ROOT = Path.home() / "Downloads"
 # Bundled files live in sys._MEIPASS when frozen by PyInstaller.
 RESOURCES = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
 WINDOW_MODE = False  # set at startup; hides the "Quit app" link, since closing the window quits
@@ -272,23 +272,8 @@ def api_extract():
     return jsonify(job=job_id, results=results, total=len(files))
 
 
-@app.get("/api/jobs/<job_id>/files/<path:name>")
-def api_download(job_id, name):
-    return send_file(get_job_file(job_id, name), as_attachment=True, download_name=name)
-
-
-@app.get("/api/jobs/<job_id>/all.zip")
-def api_download_all(job_id):
-    job = get_job(job_id)
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
-        for name in job["files"]:
-            zf.write(job["dir"] / name, name)
-    buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name="prism_graphs.zip", mimetype="application/zip")
-
-
 def save_to_disk(job_id, names):
+    """Copy graphs straight into ~/Downloads (no save dialog). Returns the saved paths."""
     job = get_job(job_id)
     SAVE_ROOT.mkdir(parents=True, exist_ok=True)
     saved = []
@@ -308,10 +293,19 @@ def save_to_disk(job_id, names):
 
 @app.post("/api/jobs/<job_id>/open/<path:name>")
 def api_open(job_id, name):
-    """Save the graph to ~/Downloads/Prism Extracts and open it in its default app (Prism)."""
+    """Save the graph to ~/Downloads and open it in its default app (Prism)."""
     dest = save_to_disk(job_id, [name])[0]
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(dest)])
+    return jsonify(path=str(dest))
+
+
+@app.post("/api/jobs/<job_id>/save/<path:name>")
+def api_save(job_id, name):
+    """Save the graph to ~/Downloads and show it in Finder."""
+    dest = save_to_disk(job_id, [name])[0]
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(dest)])
     return jsonify(path=str(dest))
 
 
@@ -319,7 +313,7 @@ def api_open(job_id, name):
 def api_save_all(job_id):
     saved = save_to_disk(job_id, list(get_job(job_id)["files"]))
     if sys.platform == "darwin" and saved:
-        subprocess.Popen(["open", "-R", str(saved[0])])
+        subprocess.Popen(["open", "-R", *map(str, saved)])
     return jsonify(folder=str(SAVE_ROOT), count=len(saved))
 
 
@@ -426,7 +420,7 @@ INDEX_HTML = r"""<!doctype html>
   <div id="results"></div>
 
   <p class="tip">Files stay on this computer — the app runs locally and nothing is uploaded anywhere.
-  “Open in Prism” saves a copy to <code>~/Downloads/Prism Extracts</code> and opens it.</p>
+  Graphs are saved straight to your Downloads folder.</p>
 </main>
 
 <script>
@@ -468,11 +462,7 @@ function render({ job, results, total }) {
 
   let html = "";
   if (total > 1) {
-    html += `<div class="toolbar">
-      <a class="btn primary" href="${base}/all.zip">Download all (.zip)</a>
-      <button data-save-all>Save all to Downloads</button></div>`;
-  } else if (total === 1) {
-    html += `<div class="toolbar"><button data-save-all>Save to Downloads</button></div>`;
+    html += `<div class="toolbar"><button class="primary" data-save-all>Download all ${total}</button></div>`;
   }
 
   for (const r of results) {
@@ -485,7 +475,7 @@ function render({ job, results, total }) {
           <small>${esc(o.progId || "Prism")} · ${kb(o.size)}</small></div>
         <div class="actions">
           <button data-open="${esc(o.file)}">Open in Prism</button>
-          <a class="btn" href="${base}/files/${encodeURIComponent(o.file)}">Download</a>
+          <button data-save="${esc(o.file)}">Download</button>
         </div></div>`;
     }
     if (r.skipped && r.skipped.length) {
@@ -500,17 +490,22 @@ function render({ job, results, total }) {
   }
   resultsEl.innerHTML = html;
 
-  resultsEl.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", async () => {
-    b.disabled = true; b.textContent = "Opening…";
-    const res = await fetch(`${base}/open/${encodeURIComponent(b.dataset.open)}`, { method: "POST" });
-    const data = await res.json();
-    b.disabled = false; b.textContent = "Open in Prism";
-    statusEl.textContent = res.ok ? `Saved and opened ${data.path}` : "Couldn't open the file.";
-  }));
+  const fileName = p => p.split("/").pop();
+  const action = (attr, route, busy, done) =>
+    resultsEl.querySelectorAll(`[${attr}]`).forEach(b => b.addEventListener("click", async () => {
+      const label = b.textContent;
+      b.disabled = true; b.textContent = busy;
+      const res = await fetch(`${base}/${route}/${encodeURIComponent(b.getAttribute(attr))}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      b.disabled = false; b.textContent = label;
+      statusEl.textContent = res.ok ? `${done} ${fileName(data.path)} in Downloads` : "Couldn't save the file.";
+    }));
+  action("data-open", "open", "Opening…", "Opened");
+  action("data-save", "save", "Saving…", "Saved");
   resultsEl.querySelectorAll("[data-save-all]").forEach(b => b.addEventListener("click", async () => {
     const res = await fetch(`${base}/save-all`, { method: "POST" });
-    const data = await res.json();
-    statusEl.textContent = res.ok ? `Saved ${data.count} file${data.count > 1 ? "s" : ""} to ${data.folder}` : "Couldn't save the files.";
+    const data = await res.json().catch(() => ({}));
+    statusEl.textContent = res.ok ? `Saved ${data.count} graph${data.count > 1 ? "s" : ""} to Downloads` : "Couldn't save the files.";
   }));
 }
 
@@ -541,7 +536,6 @@ def run_window():
     server = make_server(HOST, 0, app, threaded=True)  # any free port
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    webview.settings["ALLOW_DOWNLOADS"] = True
     webview.create_window(
         "Prism Extractor", f"http://{HOST}:{server.server_port}/",
         width=900, height=760, min_size=(520, 480),

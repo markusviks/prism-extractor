@@ -26,9 +26,11 @@ Works on Apple silicon and Intel Macs.
 
 - Drop one or more `.pptx` files on the window, or click to choose them.
 - Each graph is listed with its slide number. Then:
-  - **Open in Prism** saves a copy to `~/Downloads/Prism Extracts` and opens it.
-  - **Download** saves one graph wherever you choose.
-  - **Download all (.zip)** saves every graph at once.
+  - **Open in Prism** saves the graph to your Downloads folder and opens it.
+  - **Download** saves it to Downloads and shows it in Finder.
+  - **Download all** saves every graph to Downloads at once.
+- Clicking again won't make duplicates. If you've edited a saved graph in Prism, the next save
+  goes to a new name such as `… (1).pzf`, so your edits are never overwritten.
 - Your files never leave your Mac. The app runs entirely on your computer.
 
 ### Which Prism versions?

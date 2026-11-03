@@ -1,0 +1,8 @@
+.venv/
+build/
+dist/
+*.spec
+__pycache__/
+.pytest_cache/
+.DS_Store
+icon/AppIcon.iconset/

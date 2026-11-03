@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # python.org's installer is a universal2 build, so the app runs on Apple silicon and Intel Macs.
       - name: Install universal2 Python
@@ -32,7 +32,7 @@ jobs:
       - name: Zip app
         run: ditto -c -k --keepParent "dist/Prism Extractor.app" Prism-Extractor-macOS.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Prism-Extractor-macOS
           path: Prism-Extractor-macOS.zip
